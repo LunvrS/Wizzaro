@@ -31213,7 +31213,7 @@ MonoBehaviour:
   groundCheckRadius: 0.2
   groundLayer:
     serializedVersion: 2
-    m_Bits: 8
+    m_Bits: 0
   bulletPrefab: {fileID: 334881950907846570, guid: 86a2242ce9b642349a6864666dd40a8d, type: 3}
   firePoint: {fileID: 80242468}
   bulletForce: 20
