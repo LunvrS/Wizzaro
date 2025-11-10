@@ -1,299 +1,182 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class PlayerController : MonoBehaviour
 {
-    // Movement Variables
     [Header("Movement Settings")]
     public float moveSpeed = 5f;
-    public float jumpForce = 10f;
-    private bool isGrounded;
-    public Transform groundCheck;
-    public float groundCheckRadius = 0.2f;
-    public LayerMask groundLayer;
-    private Rigidbody2D rb;
-    private float moveInput;
-    private bool facingRight = true;
-
-    // Shotgun Variables
-    [Header("Shotgun Settings")]
+    public float knockbackResistance = 0.5f; // How much knockback affects player
+    
+    [Header("Map Bounds")]
+    public bool useMapBounds = true;
+    public float minX = -50f;
+    public float maxX = 50f;
+    public float minY = -50f;
+    public float maxY = 50f;
+    
+    [Header("Health Settings")]
+    public float maxHealth = 100f;
+    public float currentHealth;
+    
+    [Header("Shooting Settings")]
     public GameObject bulletPrefab;
     public Transform firePoint;
     public float bulletForce = 20f;
-    public float recoilForce = 10f;
-    public float airRecoilMultiplier = 1.5f;
-    public float spreadAngle = 15f;
-    public int pelletCount = 3;
     public float shootCooldown = 0.5f;
-    private bool canShoot = true;
-    public GameObject crosshair;
+    public float spreadAngle = 10f;
+    public int pelletCount = 1;
+    public int baseDamage = 10; // Base damage for bullets
     
-    // Shotgun Sprite
-    [Header("Shotgun Sprite")]
-    public GameObject shotgunSprite; // Reference to your shotgun sprite GameObject
-    public Vector2 shotgunOffset = new Vector2(0.5f, 0f); // Offset from player center
-    public float shotgunDistance = 0.75f; // Distance from player center
-
-    // Health Variables
-    [Header("Health Settings")]
-    public int maxHealth = 3;
-    private int currentHealth;
-    public Image[] heartImages;
-    public Sprite fullHeart;
-    public Sprite emptyHeart;
-
-    // UI Elements
-    [Header("UI Elements")]
-    public TMPro.TextMeshProUGUI coinText; // Changed to TextMeshProUGUI
-    public TMPro.TextMeshProUGUI timerText; // Changed to TextMeshProUGUI
-    private float gameTimer = 0f;
+    [Header("Level System")]
+    public int currentLevel = 1;
     public int coinsCollected = 0;
-    public int totalCoinsNeeded = 20;
+    public int coinsToLevelUp = 5;
+    public float damageMultiplier = 1f; // Increases with levels
     
-    // Animation
-    private Animator animator;
+    [Header("Visuals")]
+    public GameObject shotgunSprite;
+    public float shotgunDistance = 0.75f;
     
-    // Game state
-    public GameObject gameOverPanel;
-    public GameObject winPanel;
+    // Private variables
+    private Rigidbody2D rb;
+    private Vector2 movement;
+    private Vector2 mousePos;
+    private bool canShoot = true;
     private bool isGameOver = false;
-
+    private SpriteRenderer spriteRenderer;
+    private GameUIManager uiManager;
+    
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        
+        // Disable gravity for top-down movement
+        if (rb != null)
+        {
+            rb.gravityScale = 0f;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        }
+        
+        // Initialize health
         currentHealth = maxHealth;
         
-        // Check for UI components
-        if (coinText == null)
-            Debug.LogWarning("Coin Text UI component is not assigned in the inspector!");
-        if (timerText == null)
-            Debug.LogWarning("Timer Text UI component is not assigned in the inspector!");
-            
-        UpdateHealthUI();
-        UpdateCoinUI();
+        // Find UI Manager
+        uiManager = FindFirstObjectByType<GameUIManager>();
         
-        if (gameOverPanel) gameOverPanel.SetActive(false);
-        if (winPanel) winPanel.SetActive(false);
+        // Update UI
+        UpdateUI();
         
-        // If shotgun sprite wasn't assigned in inspector, create one
-        if (shotgunSprite == null)
-        {
-            Debug.LogWarning("No shotgun sprite assigned. Please assign a shotgun sprite in the inspector.");
-        }
+        // Hide cursor and show crosshair if needed
+        Cursor.visible = true;
     }
-
+    
     void Update()
     {
         if (isGameOver) return;
         
-        // Update timer
-        gameTimer += Time.deltaTime;
-        UpdateTimerUI();
+        // Get input
+        movement.x = Input.GetAxisRaw("Horizontal");
+        movement.y = Input.GetAxisRaw("Vertical");
         
-        // Check if grounded
-        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-        
-        // Debug ground check
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            Debug.Log("Space pressed. isGrounded: " + isGrounded + 
-                      ", Position: " + groundCheck.position + 
-                      ", Radius: " + groundCheckRadius +
-                      ", Layer: " + groundLayer.value);
-        }
-        
-        // Handle movement
-        moveInput = Input.GetAxisRaw("Horizontal");
-        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
-        
-        // Animation states
-        UpdateAnimationState();
-        
-        // Flip character when changing direction
-        if (moveInput > 0 && !facingRight)
-        {
-            Flip();
-        }
-        else if (moveInput < 0 && facingRight)
-        {
-            Flip();
-        }
-        
-        // Handle jumping
-        if ((Input.GetButtonDown("Jump") || Input.GetKeyDown(KeyCode.Space)) && isGrounded)
-        {
-            Jump();
-        }
+        // Get mouse position
+        mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         
         // Handle shooting
-        if (Input.GetButtonDown("Fire1") && canShoot)
+        if (Input.GetButton("Fire1") && canShoot)
         {
             Shoot();
         }
         
-        // Update crosshair position
-        UpdateCrosshairPosition();
-        
-        // Update shotgun position and rotation
+        // Update shotgun position
         UpdateShotgunPosition();
+        
+        // Flip sprite based on mouse direction
+        FlipSprite();
     }
-
-    void UpdateAnimationState()
+    
+    void FixedUpdate()
     {
-        if (animator != null)
+        if (isGameOver) return;
+        
+        // Move player
+        Vector2 targetVelocity = movement.normalized * moveSpeed;
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, 0.5f);
+        
+        // Enforce map bounds
+        if (useMapBounds)
         {
-            // Check if we have animation parameters before setting them
-            // You can uncomment these lines once you've set up your animator with these parameters
-            
-             animator.SetFloat("speed", Mathf.Abs(moveInput));
-             animator.SetBool("IsGrounded", isGrounded);
-             animator.SetFloat("VerticalSpeed", rb.linearVelocity.y);
+            Vector3 clampedPosition = transform.position;
+            clampedPosition.x = Mathf.Clamp(clampedPosition.x, minX, maxX);
+            clampedPosition.y = Mathf.Clamp(clampedPosition.y, minY, maxY);
+            transform.position = clampedPosition;
         }
     }
-
-    void Flip()
+    
+    void FlipSprite()
     {
-        // Change the way we flip to avoid rapid flipping issues
-        facingRight = !facingRight;
-        
-        // Instead of rotating, we'll flip the scale
-        Vector3 scale = transform.localScale;
-        scale.x *= -1;
-        transform.localScale = scale;
+        if (spriteRenderer != null)
+        {
+            // Flip based on mouse position relative to player
+            spriteRenderer.flipX = (mousePos.x < transform.position.x);
+        }
     }
-
-    void Jump()
-    {
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
-        animator.SetTrigger("jump");
-        
-        // Debug log to confirm jump function is called
-        Debug.Log("Jump triggered with force: " + jumpForce);
-        
-        // Comment out the animation trigger until you have set up your animator
-        // if (animator != null)
-        // {
-        //     animator.SetTrigger("Jump");
-        // }
-    }
-
+    
     void UpdateShotgunPosition()
     {
         if (shotgunSprite != null)
         {
-            // Get mouse position in world coordinates
-            Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            
             // Calculate direction to mouse
             Vector2 direction = (mousePos - (Vector2)transform.position).normalized;
             
-            // Position shotgun at an offset from player in the direction of the mouse
-            Vector2 shotgunPosition = (Vector2)transform.position + direction * shotgunDistance;
+            // Position shotgun
+            shotgunSprite.transform.position = (Vector2)transform.position + direction * shotgunDistance;
             
-            // Apply additional offset based on character facing
-            float horizontalOffset = shotgunOffset.x * (facingRight ? 1 : -1);
-            shotgunPosition += new Vector2(horizontalOffset, shotgunOffset.y);
-            
-            // Update shotgun position
-            shotgunSprite.transform.position = shotgunPosition;
-            
-            // Calculate angle for shotgun rotation
+            // Rotate shotgun
             float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-            
-            // Update shotgun rotation
             shotgunSprite.transform.rotation = Quaternion.Euler(0, 0, angle);
             
-            // Flip shotgun sprite vertically if pointing left (optional, depends on your sprite)
-            if (direction.x < 0 && shotgunSprite.transform.localScale.y > 0)
-            {
-                shotgunSprite.transform.localScale = new Vector3(
-                    shotgunSprite.transform.localScale.x,
-                    -shotgunSprite.transform.localScale.y,
-                    shotgunSprite.transform.localScale.z
-                );
-            }
-            else if (direction.x >= 0 && shotgunSprite.transform.localScale.y < 0)
-            {
-                shotgunSprite.transform.localScale = new Vector3(
-                    shotgunSprite.transform.localScale.x,
-                    Mathf.Abs(shotgunSprite.transform.localScale.y),
-                    shotgunSprite.transform.localScale.z
-                );
-            }
+            // Flip shotgun sprite vertically if pointing left
+            Vector3 scale = shotgunSprite.transform.localScale;
+            scale.y = (direction.x < 0) ? -Mathf.Abs(scale.y) : Mathf.Abs(scale.y);
+            shotgunSprite.transform.localScale = scale;
         }
     }
-
+    
     void Shoot()
     {
-        // Apply cooldown
         canShoot = false;
         StartCoroutine(ShootCooldown());
         
-        // Direction to mouse position
-        Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        // Direction to mouse
         Vector2 direction = (mousePos - (Vector2)firePoint.position).normalized;
         
-        // Play shotgun animation if needed
-        if (shotgunSprite != null)
-        {
-            // You can add animation or visual feedback here
-            StartCoroutine(ShotgunRecoilAnimation());
-        }
+        // Calculate actual damage with multiplier
+        int actualDamage = Mathf.RoundToInt(baseDamage * damageMultiplier);
         
         // Spawn pellets with spread
         for (int i = 0; i < pelletCount; i++)
         {
-            // Calculate spread angle
-            float spreadRadians = Random.Range(-spreadAngle, spreadAngle) * Mathf.Deg2Rad;
-            Vector2 spreadDirection = RotateVector(direction, spreadRadians);
+            // Calculate spread
+            float spread = Random.Range(-spreadAngle, spreadAngle);
+            Vector2 spreadDirection = RotateVector(direction, spread * Mathf.Deg2Rad);
             
             // Create bullet
-            GameObject bullet = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
-            Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
+            GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
+            Bullet bullet = bulletObj.GetComponent<Bullet>();
             
-            // Apply force to bullet
-            if (bulletRb != null)
+            if (bullet != null)
             {
-                bulletRb.AddForce(spreadDirection * bulletForce, ForceMode2D.Impulse);
+                bullet.damage = actualDamage;
+                bullet.SetDirection(spreadDirection);
             }
-            
-            // Destroy bullet after time
-            Destroy(bullet, 2f);
         }
         
-        // Apply recoil force in opposite direction
-        Vector2 recoilDirection = -direction;
-        float recoilMultiplier = isGrounded ? 1f : airRecoilMultiplier;
-        rb.AddForce(recoilDirection * recoilForce * recoilMultiplier, ForceMode2D.Impulse);
-    }
-    
-    IEnumerator ShotgunRecoilAnimation()
-    {
-        // Simple recoil animation
+        // Visual feedback
         if (shotgunSprite != null)
         {
-            Vector3 originalPosition = shotgunSprite.transform.localPosition;
-            
-            // Move back slightly
-            shotgunSprite.transform.localPosition -= shotgunSprite.transform.right * 0.2f;
-            
-            yield return new WaitForSeconds(0.05f);
-            
-            // Return to original position
-            shotgunSprite.transform.localPosition = originalPosition;
+            StartCoroutine(ShotgunRecoilAnimation());
         }
-    }
-    
-    Vector2 RotateVector(Vector2 vector, float angle)
-    {
-        return new Vector2(
-            vector.x * Mathf.Cos(angle) - vector.y * Mathf.Sin(angle),
-            vector.x * Mathf.Sin(angle) + vector.y * Mathf.Cos(angle)
-        );
     }
     
     IEnumerator ShootCooldown()
@@ -302,57 +185,66 @@ public class PlayerController : MonoBehaviour
         canShoot = true;
     }
     
-    void UpdateCrosshairPosition()
+    IEnumerator ShotgunRecoilAnimation()
     {
-        if (crosshair != null)
+        if (shotgunSprite != null)
         {
-            Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            crosshair.transform.position = mousePos;
+            Vector3 originalScale = shotgunSprite.transform.localScale;
+            shotgunSprite.transform.localScale = originalScale * 0.8f;
+            yield return new WaitForSeconds(0.05f);
+            shotgunSprite.transform.localScale = originalScale;
         }
+    }
+    
+    Vector2 RotateVector(Vector2 vector, float angleRad)
+    {
+        float cos = Mathf.Cos(angleRad);
+        float sin = Mathf.Sin(angleRad);
+        return new Vector2(
+            vector.x * cos - vector.y * sin,
+            vector.x * sin + vector.y * cos
+        );
     }
     
     public void CollectCoin()
     {
         coinsCollected++;
-        UpdateCoinUI();
         
-        // Check if all coins collected for win condition
-        if (coinsCollected >= totalCoinsNeeded)
+        // Check for level up
+        if (coinsCollected >= coinsToLevelUp)
         {
-            // You could trigger something here or wait for the flag
+            LevelUp();
         }
+        
+        UpdateUI();
     }
     
-    void UpdateCoinUI()
+    void LevelUp()
     {
-        if (coinText != null)
-        {
-            coinText.text = coinsCollected + "/" + totalCoinsNeeded + " Coins";
-        }
-        else
-        {
-            Debug.LogWarning("Coin Text is not assigned in the inspector!");
-        }
+        currentLevel++;
+        coinsCollected = 0; // Reset coin counter
+        
+        // Restore health to max
+        currentHealth = maxHealth;
+        
+        // Increase damage (stacks +10 base damage per level)
+        damageMultiplier += 0.1f; // 10% more damage per level
+        baseDamage += 10; // Also increase base damage
+        
+        Debug.Log($"Level Up! Now Level {currentLevel}. Damage: {baseDamage} x {damageMultiplier}");
+        
+        UpdateUI();
     }
     
-    void UpdateTimerUI()
-    {
-        if (timerText != null)
-        {
-            int minutes = Mathf.FloorToInt(gameTimer / 60);
-            int seconds = Mathf.FloorToInt(gameTimer % 60);
-            timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-        }
-        else
-        {
-            Debug.LogWarning("Timer Text is not assigned in the inspector!");
-        }
-    }
-    
-    public void TakeDamage(int damage)
+    public void TakeDamage(float damage)
     {
         currentHealth -= damage;
-        UpdateHealthUI();
+        currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
+        
+        // Visual feedback
+        StartCoroutine(DamageFlash());
+        
+        UpdateUI();
         
         if (currentHealth <= 0)
         {
@@ -360,59 +252,71 @@ public class PlayerController : MonoBehaviour
         }
     }
     
-    void UpdateHealthUI()
+    IEnumerator DamageFlash()
     {
-        if (heartImages.Length > 0)
+        if (spriteRenderer != null)
         {
-            for (int i = 0; i < heartImages.Length; i++)
-            {
-                if (i < currentHealth)
-                {
-                    heartImages[i].sprite = fullHeart;
-                }
-                else
-                {
-                    heartImages[i].sprite = emptyHeart;
-                }
-            }
+            spriteRenderer.color = Color.red;
+            yield return new WaitForSeconds(0.1f);
+            spriteRenderer.color = Color.white;
+        }
+    }
+    
+    public void ApplyKnockback(Vector2 force)
+    {
+        if (rb != null)
+        {
+            rb.AddForce(force * knockbackResistance, ForceMode2D.Impulse);
+        }
+    }
+    
+    void UpdateUI()
+    {
+        if (uiManager != null)
+        {
+            uiManager.UpdateHealthBar(currentHealth, maxHealth);
+            uiManager.UpdateExpBar(coinsCollected, coinsToLevelUp);
+            uiManager.UpdateLevel(currentLevel);
         }
     }
     
     public void WinGame()
     {
         isGameOver = true;
-        if (winPanel) winPanel.SetActive(true);
         rb.linearVelocity = Vector2.zero;
+        
+        if (uiManager != null)
+        {
+            uiManager.ShowWinScreen();
+        }
     }
     
     void GameOver()
     {
         isGameOver = true;
-        if (gameOverPanel) gameOverPanel.SetActive(true);
         rb.linearVelocity = Vector2.zero;
-    }
-    
-    public void PlayAgain()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-    }
-    
-    void OnCollisionEnter2D(Collision2D collision)
-    {
-        // Handle falling out of map
-        if (collision.gameObject.CompareTag("DeathZone"))
+        
+        if (uiManager != null)
         {
-            GameOver();
+            uiManager.ShowGameOver();
         }
     }
     
-    private void OnDrawGizmos()
+    void OnDrawGizmos()
     {
-        // Draw ground check radius
-        if (groundCheck != null)
+        // Draw map bounds
+        if (useMapBounds)
         {
-            Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+            Gizmos.color = Color.cyan;
+            Vector3 bottomLeft = new Vector3(minX, minY, 0);
+            Vector3 bottomRight = new Vector3(maxX, minY, 0);
+            Vector3 topLeft = new Vector3(minX, maxY, 0);
+            Vector3 topRight = new Vector3(maxX, maxY, 0);
+            
+            Gizmos.DrawLine(bottomLeft, bottomRight);
+            Gizmos.DrawLine(bottomRight, topRight);
+            Gizmos.DrawLine(topRight, topLeft);
+            Gizmos.DrawLine(topLeft, bottomLeft);
         }
     }
 }
