@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: d3783819beff7f648bbd5ed639a495ae
+guid: 644dcf7b35c02444d8cf1f66fa8daf72
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -2408530018317867212
-    second: Shotgun_0
+      213: 6726531480826087069
+    second: DATA WK1_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -97,19 +97,6 @@ TextureImporter:
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 4
-    buildTarget: Android
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
     buildTarget: WebGL
     maxTextureSize: 2048
     resizeAlgorithm: 0
@@ -126,23 +113,23 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Shotgun_0
+      name: DATA WK1_0
       rect:
         serializedVersion: 2
-        x: 34
-        y: 61
-        width: 445
-        height: 132
-      alignment: 9
-      pivot: {x: 0.09479519, y: 0.41230133}
+        x: 0
+        y: 0
+        width: 1920
+        height: 1080
+      alignment: 0
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 4376c4395be239ed0800000000000000
-      internalID: -2408530018317867212
+      spriteID: d960f1d3eb0795d50800000000000000
+      internalID: 6726531480826087069
       vertices: []
       indices: 
       edges: []
@@ -151,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 1e9d87a348f64f04e9b64a31c2730307
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -161,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Shotgun_0: -2408530018317867212
+      DATA WK1_0: 6726531480826087069
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
