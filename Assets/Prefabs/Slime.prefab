@@ -173,4 +173,8 @@ MonoBehaviour:
   damage: 20
   damageInterval: 5
   coinPrefab: {fileID: 682426611124854816, guid: 26583462ca0f73542863a56cb1816b22, type: 3}
-  coinDropChance: 0.5
+  coinDropChance: 0.85
+  levelTextPrefab: {fileID: 0}
+  levelTextOffset: {x: 0, y: 1, z: 0}
+  isBoss: 0
+  enemyLevel: 1

@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
+using TMPro; 
 
 public class Enemy : MonoBehaviour
 {
@@ -7,32 +8,53 @@ public class Enemy : MonoBehaviour
     public int health = 50;
     public float moveSpeed = 2f;
     public int damage = 20;
-    public float damageInterval = 1f; // Damage player every X seconds
+    public float damageInterval = 1f;
     
     [Header("Drop Settings")]
     public GameObject coinPrefab;
     [Range(0f, 1f)]
     public float coinDropChance = 0.5f;
     
+    [Header("Level Display")]
+    public GameObject levelTextPrefab; 
+    public Vector3 levelTextOffset = new Vector3(0, 1f, 0);
+    
+    public bool isBoss = false;
+    public int enemyLevel = 1;
+    
     private Transform player;
     private Rigidbody2D rb;
     private bool isDead = false;
     private SpriteRenderer spriteRenderer;
     private float lastDamageTime = 0f;
+    private GameObject levelTextInstance;
+    private TMPro.TextMeshPro levelText; 
+    private GameUIManager uiManager; 
+
+    // --- CHANGE 1: Add variables to store the flash coroutine and original color ---
+    private Coroutine flashRoutine;
+    private Color originalColor;
     
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+        uiManager = FindFirstObjectByType<GameUIManager>(); 
         
-        // Disable gravity for top-down movement
         if (rb != null)
         {
             rb.gravityScale = 0f;
         }
         
-        // Find player
         FindPlayer();
+        CreateLevelText();
+        
+        if (isBoss)
+        {
+            ApplyBossEffects();
+        }
+
+        originalColor = spriteRenderer.color;
     }
     
     void FindPlayer()
@@ -52,26 +74,25 @@ public class Enemy : MonoBehaviour
     {
         if (isDead) return;
         
-        // Re-find player if null
         if (player == null)
         {
             FindPlayer();
             return;
         }
         
-        // Move towards player
         MoveTowardsPlayer();
+        
+        if (levelTextInstance != null)
+        {
+            levelTextInstance.transform.position = transform.position + levelTextOffset;
+        }
     }
     
     void MoveTowardsPlayer()
     {
-        // Calculate direction to player (2D plane - both X and Y)
         Vector2 direction = (player.position - transform.position).normalized;
-        
-        // Move towards player on both axes
         rb.linearVelocity = direction * moveSpeed;
         
-        // Flip sprite based on movement direction (optional)
         if (spriteRenderer != null)
         {
             spriteRenderer.flipX = (direction.x < 0);
@@ -84,8 +105,13 @@ public class Enemy : MonoBehaviour
         
         health -= damageAmount;
         
-        // Flash effect when hit
-        StartCoroutine(FlashEffect());
+        // --- CHANGE 3: Stop any old flash and start a new one ---
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+        }
+        flashRoutine = StartCoroutine(FlashEffect());
+        // --- END CHANGE ---
         
         if (health <= 0)
         {
@@ -95,19 +121,39 @@ public class Enemy : MonoBehaviour
     
     IEnumerator FlashEffect()
     {
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = Color.red;
-            yield return new WaitForSeconds(0.1f);
-            spriteRenderer.color = Color.white;
-        }
+        // Set to flash color
+        spriteRenderer.color = Color.red;
+        yield return new WaitForSeconds(0.1f);
+        
+        // Return to the saved original color
+        spriteRenderer.color = originalColor;
+        
+        // Clear the coroutine reference
+        flashRoutine = null;
     }
     
     void Die()
     {
         isDead = true;
+
+        // Stop the flash coroutine if the enemy dies while flashing
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+        }
         
-        // Disable components
+        // Check for Boss Death
+        if (isBoss && uiManager != null)
+        {
+            uiManager.ShowWinScreen();
+            
+            EnemyWaveSpawner spawner = FindFirstObjectByType<EnemyWaveSpawner>();
+            if (spawner != null)
+            {
+                Destroy(spawner.gameObject);
+            }
+        }
+
         Collider2D col = GetComponent<Collider2D>();
         if (col != null) col.enabled = false;
         
@@ -117,27 +163,100 @@ public class Enemy : MonoBehaviour
             rb.simulated = false;
         }
         
-        // Spawn coin based on chance
+        if (levelTextInstance != null)
+        {
+            Destroy(levelTextInstance);
+        }
+        
         if (Random.value <= coinDropChance && coinPrefab != null)
         {
             Instantiate(coinPrefab, transform.position, Quaternion.identity);
         }
         
-        // Visual death effect
+        // Set death color (make sure it's not red)
         if (spriteRenderer != null)
         {
             spriteRenderer.color = new Color(0.3f, 0.3f, 0.3f, 0.5f);
         }
         
-        // Destroy after delay
         Destroy(gameObject, 0.5f);
+    }
+    
+    public void SetLevel(int level)
+    {
+        enemyLevel = level;
+        
+        if (!isBoss)
+        {
+            health = 50 + (level - 1) * 20; 
+            damage = 20 + (level - 1) * 5;  
+            moveSpeed = 2f + (level - 1) * 0.2f; 
+        }
+        
+        if (levelText != null)
+        {
+            UpdateLevelText();
+        }
+    }
+    
+    void CreateLevelText()
+    {
+        if (levelTextPrefab != null)
+        {
+            levelTextInstance = Instantiate(levelTextPrefab, transform.position + levelTextOffset, Quaternion.identity);
+            levelText = levelTextInstance.GetComponent<TMPro.TextMeshPro>();
+        }
+        else
+        {
+            GameObject textObj = new GameObject("EnemyLevelText");
+            textObj.transform.position = transform.position + levelTextOffset;
+            textObj.transform.SetParent(null); 
+            
+            levelText = textObj.AddComponent<TMPro.TextMeshPro>();
+            levelText.alignment = TMPro.TextAlignmentOptions.Center;
+            levelText.fontSize = 6;
+            levelText.sortingOrder = 10; 
+            
+            levelTextInstance = textObj;
+        }
+        
+        UpdateLevelText();
+    }
+    
+    void UpdateLevelText()
+    {
+        if (levelText != null)
+        {
+            if (isBoss)
+            {
+                levelText.text = $"<color=red>BOSS LV.{enemyLevel:00}</color>";
+                levelText.fontSize = 7;
+            }
+            else
+            {
+                levelText.text = $"LV.{enemyLevel:00}";
+                levelText.color = Color.yellow;
+            }
+        }
+    }
+    
+    void ApplyBossEffects()
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = new Color(1f, 0.5f, 0.5f); // Reddish tint
+        }
+        
+        if (levelText != null)
+        {
+            UpdateLevelText();
+        }
     }
     
     void OnTriggerStay2D(Collider2D collision)
     {
         if (isDead) return;
         
-        // Damage player on contact (with interval)
         if (collision.CompareTag("Player"))
         {
             if (Time.time - lastDamageTime >= damageInterval)
@@ -156,7 +275,6 @@ public class Enemy : MonoBehaviour
     {
         if (isDead) return;
         
-        // Handle bullet collision
         if (collision.CompareTag("Bullet"))
         {
             Bullet bullet = collision.GetComponent<Bullet>();
@@ -167,6 +285,4 @@ public class Enemy : MonoBehaviour
             Destroy(collision.gameObject);
         }
     }
-
-
 }

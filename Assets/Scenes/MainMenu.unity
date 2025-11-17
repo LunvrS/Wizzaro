@@ -425,13 +425,14 @@ MonoBehaviour:
   pauseMenuPanel: {fileID: 0}
   gameOverPanel: {fileID: 0}
   winPanel: {fileID: 0}
-  creditsPanel: {fileID: 0}
+  creditsPanel: {fileID: 1432440558}
   gameplayUI: {fileID: 0}
   healthBar: {fileID: 0}
   healthText: {fileID: 0}
   expBar: {fileID: 0}
   levelText: {fileID: 0}
   timerText: {fileID: 0}
+  waveText: {fileID: 0}
 --- !u!114 &715714850
 MonoBehaviour:
   m_ObjectHideFlags: 0

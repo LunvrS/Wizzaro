@@ -1,10 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-using TMPro;
+using TMPro; // This using directive is correct
+using System.Collections; 
 
 public class GameUIManager : MonoBehaviour
 {
+    // A tiny value that is not zero
+    private const float ALMOST_ZERO = 0.0001f;
+
     [Header("Menu Panels")]
     public GameObject mainMenuPanel;
     public GameObject pauseMenuPanel;
@@ -15,10 +19,15 @@ public class GameUIManager : MonoBehaviour
     
     [Header("Gameplay UI Elements")]
     public Image healthBar;
-    public TextMeshProUGUI healthText;
+    // --- FIX WAS HERE ---
+    public TextMeshProUGUI healthText; 
     public Image expBar;
-    public TextMeshProUGUI levelText;
-    public TextMeshProUGUI timerText;
+    // --- FIX WAS HERE ---
+    public TextMeshProUGUI levelText; 
+    // --- FIX WAS HERE ---
+    public TextMeshProUGUI timerText; 
+    // --- FIX WAS HERE ---
+    public TextMeshProUGUI waveText; 
     
     private bool isPaused = false;
     private float gameTimer = 0f;
@@ -26,38 +35,44 @@ public class GameUIManager : MonoBehaviour
     
     void Start()
     {
-        // Check scene and initialize
         if (SceneManager.GetActiveScene().name == "MainMenu")
         {
             ShowMainMenu();
         }
         else
         {
-            // Gameplay scene
             StartGameplay();
         }
     }
     
     void Update()
     {
-        // Toggle pause menu with Escape key
         if (Input.GetKeyDown(KeyCode.Escape) && gameIsActive)
         {
             TogglePauseMenu();
         }
         
-        // Update timer during gameplay
         if (gameIsActive && !isPaused)
         {
             gameTimer += Time.deltaTime;
             UpdateTimer();
         }
     }
+
+    private IEnumerator FreezeTimeSafely()
+    {
+        // Wait for the frame to end
+        yield return new WaitForEndOfFrame(); 
+        
+        // Use the non-zero value
+        Time.timeScale = ALMOST_ZERO; 
+    }
     
     void StartGameplay()
     {
         HideAllMenus();
         if (gameplayUI != null) gameplayUI.SetActive(true);
+        if (waveText != null) waveText.gameObject.SetActive(false); 
         gameIsActive = true;
         gameTimer = 0f;
         Time.timeScale = 1f;
@@ -94,7 +109,8 @@ public class GameUIManager : MonoBehaviour
         
         if (isPaused)
         {
-            Time.timeScale = 0f;
+            Time.timeScale = ALMOST_ZERO; 
+            
             if (pauseMenuPanel != null) pauseMenuPanel.SetActive(true);
         }
         else
@@ -108,17 +124,40 @@ public class GameUIManager : MonoBehaviour
     {
         gameIsActive = false;
         if (gameOverPanel != null) gameOverPanel.SetActive(true);
-        Time.timeScale = 0f;
+        if (waveText != null) waveText.gameObject.SetActive(false);
+        
+        StartCoroutine(FreezeTimeSafely());
     }
     
     public void ShowWinScreen()
     {
         gameIsActive = false;
         if (winPanel != null) winPanel.SetActive(true);
-        Time.timeScale = 0f;
+        if (waveText != null) waveText.gameObject.SetActive(false); 
+
+        StartCoroutine(FreezeTimeSafely());
     }
     
-    // UI Update Methods
+    // --- (Rest of your script is unchanged) ---
+    
+    public void UpdateWaveText(int currentWave, int totalWaves)
+    {
+        if (waveText != null)
+        {
+            waveText.gameObject.SetActive(true);
+            waveText.text = $"Wave: {currentWave} / {totalWaves}";
+        }
+    }
+
+    public void ShowBossWaveText()
+    {
+        if (waveText != null)
+        {
+            waveText.gameObject.SetActive(true);
+            waveText.text = "BOSS WAVE";
+        }
+    }
+
     public void UpdateHealthBar(float currentHealth, float maxHealth)
     {
         if (healthBar != null)
@@ -167,15 +206,15 @@ public class GameUIManager : MonoBehaviour
     
     public void RestartGame()
     {
+        Time.timeScale = 1f; 
         Scene currentScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(currentScene.name);
-        Time.timeScale = 1f;
     }
     
     public void QuitToMainMenu()
     {
+        Time.timeScale = 1f; 
         SceneManager.LoadScene("MainMenu");
-        Time.timeScale = 1f;
     }
     
     public void ResumeGame()
